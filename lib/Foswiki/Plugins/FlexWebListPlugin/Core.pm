@@ -1,6 +1,6 @@
 # Plugin for Foswiki - The Free and Open Source Wiki, http://foswiki.org/
 #
-# Copyright (C) 2006-2012 Michael Daum http://michaeldaumconsulting.com
+# Copyright (C) 2006-2014 Michael Daum http://michaeldaumconsulting.com
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -19,33 +19,37 @@ use warnings;
 
 use Foswiki::Func ();
 use Foswiki::Plugins ();
-use Foswiki::Meta ();
 use Foswiki::WebFilter ();
 
-use constant DEBUG => 0; # toggle me
-our $webIterator; # cached version ... invalidated on a web rename
+use constant TRACE => 0; # toggle me
+use constant CACHE_WEBS => 1;
 
 ###############################################################################
 # static
 sub writeDebug {
-  print STDERR '- FlexWebListPlugin - '.$_[0]."\n" if DEBUG;
+  print STDERR '- FlexWebListPlugin - '.$_[0]."\n" if TRACE;
 }
 
 ###############################################################################
 # constructor
 sub new {
   my $class = shift;
-  my $this = bless({}, $class);
+
+  my $this = bless({@_}, $class);
 
   #writeDebug("new FlexWebListPlugin::Core");
 
-  $this->{session} = $Foswiki::Plugins::SESSION;
   $this->{homeTopic} = Foswiki::Func::getPreferencesValue('HOMETOPIC') 
     || $Foswiki::cfg{HomeTopicName} || 'WebHome';
 
-  #$webIterator = undef;#DEBUG;
-
   return $this;
+}
+
+###############################################################################
+sub reset {
+  my $this = shift;
+
+  undef $this->{webIterator};
 }
 
 ###############################################################################
@@ -182,9 +186,8 @@ sub handler {
   my $result = join($this->{separator},@result);
   $result = $this->{header}.$result.$this->{footer};
   $result =~ s/\$marker//g;
+
   escapeParameter($result);
-  #writeDebug("result=$result");
-  $result = Foswiki::Func::expandCommonVariables($result, $currentTopic, $currentWeb);
 
   #writeDebug("*** handler done");
 
@@ -200,6 +203,8 @@ sub formatWeb {
   $web->{done} = 1;
 
   #writeDebug("formatWeb($web->{key})");
+
+  my $session = $Foswiki::Plugins::SESSION;
 
   # format all subwebs recursively
   my $subWebResult = '';
@@ -235,7 +240,7 @@ sub formatWeb {
 
   my $url = '';
   if ($result =~ /\$url/) {
-    $url = $this->{session}->getScriptUrl(0, 'view', $web->{key}, $this->{homeTopic});
+    $url = $session->getScriptUrl(0, 'view', $web->{key}, $this->{homeTopic});
   }
 
   my $sitemapUseTo = '';
@@ -260,24 +265,39 @@ sub formatWeb {
     $sitemapWhat =~ s/#nop#/<nop>/g;
   }
 
+  my $summary = $sitemapWhat || '';
+  if ($result =~ /\$summary/) {
+    $summary = Foswiki::Func::getPreferencesValue('WEBSUMMARY', $web->{key}) || '';
+    $summary =~ s/<nop>//g;
+  }
+
+  my $title = $name || '';
+  if ($result =~ /\$title/) {
+    $title = getTopicTitle($web->{key}, $this->{homeTopic});
+    $title = $name if $title eq $this->{homeTopic};
+  }
+
+
   my $color = '';
   if ($result =~ /\$color/) {
     $color =
       Foswiki::Func::getPreferencesValue('WEBBGCOLOR', $web->{key}) || '';
   }
 
-  $result =~ s/\$parent/$web->{parentName}/go;
-  $result =~ s/\$name/$name/go;
-  $result =~ s/\$origname/$web->{name}/go;
+  $result =~ s/\$parent/$web->{parentName}/g;
+  $result =~ s/\$name/$name/g;
+  $result =~ s/\$title/$title/g;
+  $result =~ s/\$origname/$web->{name}/g;
   $result =~ s/\$qname/"$web->{key}"/g;# historical
-  $result =~ s/\$web/$web->{key}/go;
-  $result =~ s/\$depth/$web->{depth}/go;
+  $result =~ s/\$web/$web->{key}/g;
+  $result =~ s/\$depth/$web->{depth}/g;
   $result =~ s/\$indent\((.+?)\)/$1 x $web->{depth}/ge;
   $result =~ s/\$indent/'   ' x $web->{depth}/ge;
   $result =~ s/\$nrsubwebs/$nrSubWebs/g;
   $result =~ s/\$url/$url/g;
   $result =~ s/\$sitemapuseto/$sitemapUseTo/g;
   $result =~ s/\$sitemapwhat/$sitemapWhat/g;
+  $result =~ s/\$summary/$summary/g;
   $result =~ s/\$color/$color/g;
 
   #writeDebug("result=$result");
@@ -290,14 +310,14 @@ sub formatWeb {
 sub getWebIterator {
   my $this = shift;
 
-  if (defined $webIterator) {
-    $webIterator->reset;
+  if (defined $this->{webIterator} && CACHE_WEBS) {
+    $this->{webIterator}->reset;
   } else {
-    my $webObject = new Foswiki::Meta($this->{session});
-    $webIterator = $webObject->eachWeb($Foswiki::cfg{EnableHierarchicalWebs});
+    my @webs = Foswiki::Func::getListOfWebs();
+    $this->{webIterator} = new Foswiki::ListIterator(\@webs);
   }
 
-  return $webIterator;
+  return $this->{webIterator};
 }
 
 ###############################################################################
@@ -306,6 +326,7 @@ sub getWebIterator {
 sub getWebs {
   my ($this, $filter) = @_;
 
+  my $session = $Foswiki::Plugins::SESSION;
   $filter ||= '';
 
   #writeDebug("getWebs($filter)");
@@ -324,7 +345,7 @@ sub getWebs {
       my $w = '';
       $w .= '/' if $w;
       $w .= $wit->next();
-      push @webs, $w if $filter->ok($this->{session}, $w);
+      push @webs, $w if $filter->ok($session, $w);
     }
   } else {
     @webs = $wit->all();
@@ -405,13 +426,48 @@ sub isAdmin {
 sub escapeParameter {
   return '' unless $_[0];
 
+  $_[0] =~ s/\$perce?nt/%/g;
   $_[0] =~ s/\$nop//g;
   $_[0] =~ s/\$n/\n/g;
-  $_[0] =~ s/\$percnt/%/g;
   $_[0] =~ s/\$dollar/\$/g;
 }
 
-
-
 ###############################################################################
+sub getTopicTitle {
+  my ($web, $topic) = @_;
+
+  my ($meta, $text) = Foswiki::Func::readTopic($web, $topic);
+
+  if ($Foswiki::cfg{SecureTopicTitles}) {
+    my $wikiName = Foswiki::Func::getWikiName();
+    return $topic
+      unless Foswiki::Func::checkAccessPermission('VIEW', $wikiName, $text, $topic, $web, $meta);
+  }
+
+  # read the formfield value
+  my $title = $meta->get('FIELD', 'TopicTitle');
+  $title = $title->{value} if $title;
+
+  # read the topic preference
+  unless ($title) {
+    $title = $meta->get('PREFERENCE', 'TOPICTITLE');
+    $title = $title->{value} if $title;
+  }
+
+  # read the preference
+  unless ($title)  {
+    Foswiki::Func::pushTopicContext($web, $topic);
+    $title = Foswiki::Func::getPreferencesValue('TOPICTITLE');
+    Foswiki::Func::popTopicContext();
+  }
+
+  # default to topic name
+  $title ||= $topic;
+
+  $title =~ s/\s*$//;
+  $title =~ s/^\s*//;
+
+  return $title;
+} 
+
 1;

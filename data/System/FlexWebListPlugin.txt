@@ -68,6 +68,7 @@ that are replaced with a current value:
    * =$web=: the full name of the web, e.g. =Main/Foo/Bar=
    * =$qname=: the full name of the web in quotes, e.g. ="Main/Foo/Bar"= (deprecated)
    * =$name=: the name of the web without the leading parent webs, e.g. =Bar=
+   * =$title=: the title of the web as specified in the !TopicTitle of the !WebHome topic
    * =$origname=: the original name of the web despite any name mapping
    * =$parent=: the name of the parent web of a sub web or the empty string if there's none
    * =$marker=: marker text (see above) if the current item is selected, empty otherwise
@@ -81,8 +82,9 @@ that are replaced with a current value:
    * =$dollar=: replaced with a dollar char ($)
    * =$nop=: removed from the format string before expanding common foswiki variables
    * =$url=: link to homepage of web
-   * =$sitemapuseto=: content of the SITEMAPUSETO preference of the web
-   * =$sitemapwhat=: content of the SITEMAPWAT preference 
+   * =$sitemapuseto=: content of the SITEMAPUSETO preference of the web (deprecated; use =$summary=)
+   * =$sitemapwhat=: content of the SITEMAPWAT preference (deprecated; use =$summary=)
+   * =$summary=: content of the WEBSUMMARY preference 
    * =$color=: content of the WEBBGCOLOR preference
 
 The following picture illustrates when which format strings are used
@@ -142,11 +144,15 @@ See FlexWebListExamples and FlexWebListTree.
 -->
 
 |  Plugin Author: | Foswiki:Main.MichaelDaum |
-|  Copyright &copy;: | 2006-2012, Michael Daum http://michaeldaumconsulting.com |
+|  Copyright &copy;: | 2006-2014, Michael Daum http://michaeldaumconsulting.com |
 |  License: | GPL ([[http://www.gnu.org/copyleft/gpl.html][GNU General Public License]]) |
 |  Release: | %$RELEASE% |
 |  Version: | %$VERSION% |
 |  Change History: | &nbsp; |
+|  28 May 2014: | !TopicTitle defaults to web name (not !WebHome) if not set otherwise |
+|  28 Apr 2014: | added support for !TopicTitle |
+|  18 Nov 2013: | support =WEBSUMMARY=;  deprecate =SITEMAPWAT= and =SITEMAPUSETO= |
+|  07 Nov 2013: | fixed caching issue |
 |  19 Nov 2012: | improve performance on large foswikis by caching a webs iterator to be reused |
 |  10 Jan 2012: | fixed setting format strings to the empty string |
 |  25 Aug 2011: | added ignorecase paramete; improved documentation |
