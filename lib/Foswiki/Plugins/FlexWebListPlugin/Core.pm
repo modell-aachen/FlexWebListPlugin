@@ -22,7 +22,7 @@ use Foswiki::Plugins ();
 use Foswiki::WebFilter ();
 
 use constant TRACE => 0; # toggle me
-use constant CACHE_WEBS => 1;
+use constant CACHE_WEBS => 0;
 
 ###############################################################################
 # static
